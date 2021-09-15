@@ -1,19 +1,31 @@
 use crate::token;
+use crate::token::Token;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    OrphanEqual,
+    NoCloseDoubleQuote,
+    EOS,
     TokenErr(token::Error),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Syntax {
-    Variable { name: String, value: String },
-    Command(String),
-    Argument(String),
+pub struct Variable {
+    name: String,
+    value: String,
 }
 
-#[derive(Debug)]
+/// Reinterpreted token for parser.
+#[derive(Debug, PartialEq)]
+pub enum Word {
+    And,
+    Or,
+    Pipe,
+    Terminator,
+    String(String),
+    Variable(Variable),
+}
+
+#[derive(Debug, Clone)]
 pub struct Parser<'a> {
     tokenizer: token::Tokenizer<'a>,
 }
@@ -25,60 +37,156 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Syntax>, Error> {
-        let mut is_found_command = false;
-        let mut vec = Vec::new();
+    pub fn parse(&mut self) -> Result<Vec<Word>, Error> {
+        let mut words = Vec::new();
 
         loop {
-            match self.next() {
-                Ok(token::Token::String { s, range, kind }) => {
-                    let mut name = String::from(&s[range]);
-
-                    if kind == token::StringKind::Raw
-                        && is_variable_name(&name)
-                        && self.eat_token(token::Token::Equal)
-                    {
-                        let value = self.value()?;
-                        vec.push(Syntax::Variable { name, value });
-                        continue;
-                    }
-                    let value = self.value()?;
-                    name.push_str(value.as_str());
-
-                    if is_found_command {
-                        vec.push(Syntax::Argument(name));
-                    } else {
-                        vec.push(Syntax::Command(name));
-                        is_found_command = true;
-                    }
-                }
-                Ok(token::Token::Equal) => return Err(Error::OrphanEqual),
-                Err(token::Error::EOS) => break,
-                _ => continue,
+            match self.next_word() {
+                Ok(word) => words.push(word),
+                Err(Error::EOS) => break,
+                Err(e) => return Err(e),
             }
         }
 
-        Ok(vec)
+        Ok(words)
+    }
+
+    fn next_word(&mut self) -> Result<Word, Error> {
+        let mut value = String::new();
+        let mut is_somethihg_found = false;
+
+        loop {
+            match self.peek_token() {
+                Ok(Token::Ampersand) => {
+                    let _ = self.next();
+
+                    if self.eat_token(Token::Ampersand) {
+                        let _ = self.next();
+                        return Ok(Word::And);
+                    } else {
+                        return Ok(Word::Terminator);
+                    }
+                }
+                Ok(Token::VerticalBar) => {
+                    let _ = self.next();
+
+                    if self.eat_token(Token::VerticalBar) {
+                        let _ = self.next();
+                        return Ok(Word::Or);
+                    } else {
+                        return Ok(Word::Pipe);
+                    }
+                }
+                Ok(Token::Newline | Token::Semicolon) => {
+                    if is_somethihg_found {
+                        break;
+                    } else {
+                        let _ = self.next();
+                        return Ok(Word::Terminator);
+                    }
+                }
+                Ok(Token::Spaces { .. }) => {
+                    let _ = self.next();
+
+                    if is_somethihg_found {
+                        break;
+                    } else {
+                        continue;
+                    }
+                }
+                Ok(Token::DoubleQuote) => {
+                    let _ = self.next();
+
+                    match self.double_quoted_string() {
+                        Ok(s) => return Ok(Word::String(s)),
+                        Err(e) => return Err(e),
+                    }
+                }
+                Ok(token @ Token::String { .. }) => {
+                    let _ = self.next();
+
+                    let name = String::from(token);
+
+                    if is_variable_name(&name) && self.eat_token(Token::Equal) {
+                        let value = self.value()?;
+
+                        return Ok(Word::Variable(Variable { name, value }));
+                    } else {
+                        value.push_str(name.as_str());
+                    }
+                }
+                Ok(token) => {
+                    let _ = self.next();
+
+                    value.push_str(String::from(token).as_str());
+                }
+                Err(token::Error::EOS) => {
+                    let _ = self.next();
+
+                    if is_somethihg_found {
+                        break;
+                    } else {
+                        return Err(Error::EOS);
+                    }
+                }
+                Err(e) => return Err(Error::TokenErr(e)),
+            }
+
+            is_somethihg_found = true;
+        }
+
+        Ok(Word::String(value))
     }
 
     fn value(&mut self) -> Result<String, Error> {
-        let mut value = String::new();
+        let mut s = String::new();
 
         loop {
-            match self.next() {
-                Ok(token::Token::Equal) => value.push('='),
-                Ok(token::Token::Newline) => break,
-                Ok(token::Token::Spaces) => break,
-                Ok(token::Token::String { s, range, .. }) => value.push_str(&s[range]),
-                Err(err) => return Err(Error::TokenErr(err)),
+            match self.peek_token() {
+                Ok(Token::DoubleQuote) => {
+                    let _ = self.next();
+                    let s = self.double_quoted_string()?;
+                    return Ok(s);
+                }
+                Ok(
+                    Token::Newline
+                    | Token::Semicolon
+                    | Token::Spaces { .. }
+                    | Token::Ampersand
+                    | Token::VerticalBar,
+                ) => break,
+                Ok(token) => {
+                    let _ = self.next();
+                    s.push_str(String::from(token).as_str());
+                }
+                Err(e) => return Err(Error::TokenErr(e)),
             }
         }
 
-        Ok(value)
+        Ok(s)
+    }
+
+    fn double_quoted_string(&mut self) -> Result<String, Error> {
+        let mut s = String::new();
+
+        loop {
+            match self.next() {
+                Ok(Token::DoubleQuote) => return Ok(s),
+                Ok(token) => {
+                    s.push_str(String::from(token).as_str());
+                }
+                Err(token::Error::EOS) => return Err(Error::NoCloseDoubleQuote),
+                Err(e) => return Err(Error::TokenErr(e)),
+            }
+        }
     }
 
     fn next(&mut self) -> Result<token::Token<'a>, token::Error> {
         self.tokenizer.next()
+    }
+
+    fn peek_token(&mut self) -> Result<token::Token<'a>, token::Error> {
+        self.tokenizer.peek_token()
     }
 
     fn eat_token(&mut self, token: token::Token) -> bool {
@@ -121,10 +229,7 @@ mod tests {
         let s = "   ls   ";
         let mut parser = Parser::new(s);
 
-        assert_eq!(
-            parser.parse(),
-            Ok(vec![Syntax::Command(String::from("ls"))])
-        );
+        assert_eq!(parser.parse(), Ok(vec![Word::String(String::from("ls"))]));
 
         let s = "  LS_COLOR='*.rs=38;5;81'    ls -ABFHhov    --color=auto  ";
 
@@ -133,13 +238,32 @@ mod tests {
         assert_eq!(
             parser.parse(),
             Ok(vec![
-                Syntax::Variable {
+                Word::Variable(Variable {
                     name: String::from("LS_COLOR"),
                     value: String::from("*.rs=38;5;81")
-                },
-                Syntax::Command(String::from("ls")),
-                Syntax::Argument(String::from("-ABFHhov")),
-                Syntax::Argument(String::from("--color=auto")),
+                }),
+                Word::String(String::from("ls")),
+                Word::String(String::from("-ABFHhov")),
+                Word::String(String::from("--color=auto"))
+            ])
+        );
+
+        let s = "ls | grep -i file && head || tail";
+
+        let mut parser = Parser::new(s);
+
+        assert_eq!(
+            parser.parse(),
+            Ok(vec![
+                Word::String(String::from("ls")),
+                Word::Pipe,
+                Word::String(String::from("grep")),
+                Word::String(String::from("-i")),
+                Word::String(String::from("file")),
+                Word::And,
+                Word::String(String::from("head")),
+                Word::Or,
+                Word::String(String::from("tail")),
             ])
         );
     }

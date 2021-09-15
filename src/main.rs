@@ -7,23 +7,32 @@ use std::process;
 mod parse;
 mod token;
 
-fn extract_command_name(s: &String) -> Option<String> {
+use parse::Word;
+
+fn extract_command_names(s: &String) -> Option<Vec<String>> {
     let mut parser = parse::Parser::new(s.as_str());
 
-    let syns = parser.parse();
+    let mut commands = Vec::new();
+    let mut is_first_word = true;
 
-    match syns {
-        Ok(syntaxes) => {
-            for syn in syntaxes {
-                if let parse::Syntax::Command(s) = syn {
-                    return Some(s);
+    if let Ok(words) = parser.parse() {
+        for word in words {
+            match word {
+                Word::String(command) if is_first_word => {
+                    commands.push(command);
+                    is_first_word = false;
                 }
+                Word::And | Word::Or | Word::Pipe | Word::Terminator => {
+                    is_first_word = true;
+                }
+                _ => continue,
             }
-
-            None
         }
-        _ => None,
+    } else {
+        return None;
     }
+
+    Some(commands)
 }
 
 fn help() {
@@ -82,9 +91,11 @@ fn main() {
             break;
         }
 
-        if let Some(cmd) = extract_command_name(&s) {
-            let counter = map.entry(cmd).or_insert(0usize);
-            *counter += 1;
+        if let Some(cmds) = extract_command_names(&s) {
+            for cmd in cmds {
+                let counter = map.entry(cmd).or_insert(0usize);
+                *counter += 1;
+            }
         }
 
         count += 1;
