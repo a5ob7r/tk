@@ -4,7 +4,7 @@ use crate::token::Token;
 #[derive(Debug, PartialEq)]
 pub enum Error {
     NoCloseDoubleQuote,
-    EOS,
+    Eos,
     TokenErr(token::Error),
 }
 
@@ -43,7 +43,7 @@ impl<'a> Parser<'a> {
         loop {
             match self.next_word() {
                 Ok(word) => words.push(word),
-                Err(Error::EOS) => break,
+                Err(Error::Eos) => break,
                 Err(e) => return Err(e),
             }
         }
@@ -120,13 +120,13 @@ impl<'a> Parser<'a> {
 
                     value.push_str(String::from(token).as_str());
                 }
-                Err(token::Error::EOS) => {
+                Err(token::Error::Eos) => {
                     let _ = self.next();
 
                     if is_somethihg_found {
                         break;
                     } else {
-                        return Err(Error::EOS);
+                        return Err(Error::Eos);
                     }
                 }
                 Err(e) => return Err(Error::TokenErr(e)),
@@ -175,7 +175,7 @@ impl<'a> Parser<'a> {
                 Ok(token) => {
                     s.push_str(String::from(token).as_str());
                 }
-                Err(token::Error::EOS) => return Err(Error::NoCloseDoubleQuote),
+                Err(token::Error::Eos) => return Err(Error::NoCloseDoubleQuote),
                 Err(e) => return Err(Error::TokenErr(e)),
             }
         }
@@ -194,7 +194,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn is_variable_name(s: &String) -> bool {
+fn is_variable_name(s: &str) -> bool {
     for (i, c) in s.char_indices() {
         if i == 0 && c.is_ascii_digit() {
             return false;

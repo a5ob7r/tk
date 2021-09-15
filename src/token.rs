@@ -6,7 +6,7 @@ use std::str;
 #[derive(Debug, PartialEq)]
 pub enum Error {
     MissingEscapedChar,
-    EOS,
+    Eos,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -150,7 +150,7 @@ impl<'a> Tokenizer<'a> {
                     range: start..end,
                 })
             }),
-            None => Err(Error::EOS),
+            None => Err(Error::Eos),
         }
     }
 
@@ -159,7 +159,7 @@ impl<'a> Tokenizer<'a> {
             match self.one() {
                 Some((i, '\'')) => return Ok(i),
                 Some(_) => continue,
-                None => return Err(Error::EOS),
+                None => return Err(Error::Eos),
             }
         }
     }
@@ -171,7 +171,7 @@ impl<'a> Tokenizer<'a> {
                     // Skip a \.
                     self.one();
                     // Skip an escaped char.
-                    if let None = self.one() {
+                    if self.one().is_none() {
                         return Err(Error::MissingEscapedChar);
                     }
                 }
@@ -223,14 +223,14 @@ mod tests {
         let s = "";
         let mut tokenizer = Tokenizer::new(s);
 
-        assert_eq!(tokenizer.next(), Err(Error::EOS),);
+        assert_eq!(tokenizer.next(), Err(Error::Eos),);
 
         let s = "echo   ";
         let mut tokenizer = Tokenizer::new(s);
 
         assert_eq!(tokenizer.next(), Ok(Token::String { s, range: 0..4 }));
         assert_eq!(tokenizer.next(), Ok(Token::Spaces { s, range: 4..7 }));
-        assert_eq!(tokenizer.next(), Err(Error::EOS));
+        assert_eq!(tokenizer.next(), Err(Error::Eos));
 
         let s = r#"  LS_COLORS='*.rs=38;5;81' var=hoge   haskellorls   '-ABFHhov'   "--color=auto"  --time-style=iso"#;
         let mut tokenizer = Tokenizer::new(s);
@@ -272,6 +272,6 @@ mod tests {
         assert_eq!(tokenizer.next(), Ok(Token::Equal));
         // iso
         assert_eq!(tokenizer.next(), Ok(Token::String { s, range: 94..97 }));
-        assert_eq!(tokenizer.next(), Err(Error::EOS),);
+        assert_eq!(tokenizer.next(), Err(Error::Eos),);
     }
 }

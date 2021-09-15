@@ -9,8 +9,8 @@ mod token;
 
 use parse::Word;
 
-fn extract_command_names(s: &String) -> Option<Vec<String>> {
-    let mut parser = parse::Parser::new(s.as_str());
+fn extract_command_names(s: &str) -> Option<Vec<String>> {
+    let mut parser = parse::Parser::new(s);
 
     let mut commands = Vec::new();
     let mut is_first_word = true;
