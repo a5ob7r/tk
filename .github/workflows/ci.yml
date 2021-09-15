@@ -1,0 +1,21 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Run formatter
+        run: cargo fmt -- --check
+
+      - name: Run linter
+        run: cargo clippy -- -D warnings
+
+      - name: Run test
+        run: cargo test
+
+      - name: Build
+        run: cargo build --release --locked
