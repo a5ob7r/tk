@@ -86,7 +86,14 @@ fn main() {
     let mut map: HashMap<String, usize> = HashMap::new();
 
     let mut s = String::new();
-    while let Ok(n) = handle.read_line(&mut s) {
+    loop {
+        let n = match handle.read_line(&mut s) {
+            Ok(n) => n,
+            // NOTE: Ignore non UTF-8 input.
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => continue,
+            _ => break,
+        };
+
         if n == 0 {
             break;
         }
