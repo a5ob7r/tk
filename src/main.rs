@@ -44,11 +44,14 @@ Descriptions:
 Usages:
   Input command history lines from stdin into `tk`.
 
-  # bash, fish
-  history | tk
+  # bash
+  fc -n -l 1 | tk
 
   # zsh
   history -n 1 | tk
+
+  # fish
+  history | tk
 
 Options:
   -h, --help    Show this help message and exit.
