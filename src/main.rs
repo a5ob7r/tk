@@ -85,7 +85,7 @@ fn main() {
     let stdin = io::stdin();
     let mut handle = stdin.lock();
 
-    let mut count = 0;
+    let mut total = 0;
     let mut map: HashMap<String, usize> = HashMap::new();
 
     let mut s = String::new();
@@ -108,7 +108,7 @@ fn main() {
             }
         }
 
-        count += 1;
+        total += 1;
         s.clear();
     }
 
@@ -116,7 +116,10 @@ fn main() {
     vec.sort();
     vec.reverse();
 
+    println!("       total entry number: {}", &total);
+    println!("total unique entry number: {}", vec.len());
+
     for (v, k) in vec {
-        println!("{:>10}({:.6}) {}", v, (v as f64) / (count as f64), k);
+        println!("{:>10}({:.6}) {}", v, (v as f64) / (total as f64), k);
     }
 }
